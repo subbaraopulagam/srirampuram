@@ -1,0 +1,79 @@
+echo "*********** Deployment of Lead App ************"
+
+function stop_services()
+{
+  echo "*** Started the Stopping services function ****"
+  ssh root@192.168.146.129 '/root/apache-tomcat-8.0.15/bin/shutdown.sh'
+  echo "*** Completed the Stopping services function ****"
+}
+
+function start_services()
+{
+  echo "*** Started the START services function ****"
+  ssh root@192.168.146.129 '/root/apache-tomcat-8.0.15/bin/startup.sh'
+  echo "*** Completed the START services function ****"
+}
+
+function backup_existing()
+{
+  echo "*** Started the BACKUP services function ****"
+   ssh root@192.168.146.129 "mkdir -p /root/bkp"
+  ssh root@192.168.146.129 " if [ -f /root/apache-tomcat-8.0.15/webapps/leadapp.war ]; then mv /root/apache-tomcat-8.0.15/webapps/leadapp.war /root/bkp/; fi"
+  ssh root@192.168.146.129 " if [ -d /root/apache-tomcat-8.0.15/webapps/leadapp ]; then rm -rf /root/apache-tomcat-8.0.15/webapps/leadapp ; fi"
+  echo "*** Completed the BACKUP services function ****"
+}
+
+function db_deploy()
+{
+  echo "*** Started the DB DEPLOY function ****"
+  scp src/database/schema.sql root@192.168.146.129:/root/dbdeploy
+  ssh root@192.168.146.129 'mysql -u sunny -psunny123 leadapp < /root/dbdeploy/schema.sql'
+  if [ $? -eq 0 ]
+  then  
+    echo "*** Completed the DB DEPLOY successfully ****"
+  else
+    echo "** DB deployment FAILED "
+    exit 1
+  fi
+}
+
+function app_deploy()
+{
+  echo "*** Started the APP DEPLOY function ****"
+  scp dist/lib/leadapp.war root@192.168.146.129:/root/apache-tomcat-8.0.15/webapps
+  echo "*** Completed the APP DEPLOY function ****"
+}
+function app_localize()
+{
+  echo "*** Started the LOCALIZATION function ****"
+  
+ ssh root@192.168.146.129 'sed -i "s/DB_IP/192.168.146.129/" /root/apache-tomcat-8.0.15/webapps/leadapp/WEB-INF/classes/hibernate.cfg.xml'
+ssh root@192.168.146.129 'sed -i "s/DB_NAME/leadapp/" /root/apache-tomcat-8.0.15/webapps/leadapp/WEB-INF/classes/hibernate.cfg.xml'
+ssh root@192.168.146.129 'sed -i "s/DB_USER/sunny/" /root/apache-tomcat-8.0.15/webapps/leadapp/WEB-INF/classes/hibernate.cfg.xml'
+ssh root@192.168.146.129 'sed -i "s/DB_PWD/sunny123/" /root/apache-tomcat-8.0.15/webapps/leadapp/WEB-INF/classes/hibernate.cfg.xml'
+
+  echo "*** Completed the LOCALIZATION function ****"
+}
+
+op=$1
+
+case $op in
+
+stop)  stop_services ;;
+start) start_services ;;
+deploy) db_deploy
+         app_deploy ;;
+backup) backup_existing ;;
+all)  stop_services 
+      backup_existing 
+      db_deploy 
+      app_deploy
+      start_services
+      sleep 10
+      app_localize 
+      stop_services
+      start_services   ;;
+*)   echo Wrong operation passes ;;
+esac
+
+
